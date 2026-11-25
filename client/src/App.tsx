@@ -1,10 +1,10 @@
-import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, BriefcaseBusiness, Building2, ChevronRight, CircleUserRound, GraduationCap, LayoutDashboard, LogOut, Moon, Search, Sun, UserRound, Users, Bookmark, FileText, Settings, Menu, X } from "lucide-react";
-import { api, authExpiredEvent, clearToken, getToken, setToken, type Role, type User } from "./api";
+import { api, authExpiredEvent, clearAuth, type Role, type User } from "./api";
 
-const AuthContext = createContext<{ user: User | null; login: (email: string, password: string) => Promise<User>; register: (data: { name: string; email: string; password: string; role: "STUDENT" | "RECRUITER" }) => Promise<User>; logout: () => Promise<void>; loading: boolean }>({ user: null, login: async () => { throw new Error("Unavailable"); }, register: async () => { throw new Error("Unavailable"); }, logout: async () => {}, loading: true });
+const AuthContext = createContext<{ user: User | null; login: (email: string, password: string) => Promise<User>; register: (data: { name: string; email: string; password: string; role: "STUDENT" | "RECRUITER" }) => Promise<void>; logout: () => Promise<void>; loading: boolean }>({ user: null, login: async () => { throw new Error("Unavailable"); }, register: async () => { throw new Error("Unavailable"); }, logout: async () => {}, loading: true });
 
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -16,22 +16,20 @@ function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(authExpiredEvent, handleExpired);
   }, []);
   useEffect(() => {
-    if (!getToken()) { setLoading(false); return; }
-    api<User & { accountStatus: string }>("/api/auth/me").then(setUser).catch(clearToken).finally(() => setLoading(false));
+    api<User & { accountStatus: string }>("/api/auth/me").then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
   }, []);
   async function login(email: string, password: string) {
-    const data = await api<{ user: User; token: string }>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-    setToken(data.token); setUser(data.user); return data.user;
+    const data = await api<{ user: User }>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+    setUser(data.user); return data.user;
   }
   async function register(payload: { name: string; email: string; password: string; role: "STUDENT" | "RECRUITER" }) {
-    const data = await api<{ user: User; token: string }>("/api/auth/register", { method: "POST", body: JSON.stringify(payload) });
-    setToken(data.token); setUser(data.user); return data.user;
+    await api<{ message: string }>("/api/auth/register", { method: "POST", body: JSON.stringify(payload) });
   }
   async function logout() {
     try {
-      if (getToken()) await api("/api/auth/logout", { method: "POST" });
+      await api("/api/auth/logout", { method: "POST" });
     } finally {
-      clearToken();
+      clearAuth();
       queryClient.clear();
       setUser(null);
     }
@@ -116,16 +114,82 @@ function QueryError({ error, retry }: { error: unknown; retry: () => unknown }) 
 
 function AuthPage({ mode }: { mode: "login"|"register" }) {
   const { login, register } = useAuth(); const navigate = useNavigate();
-  const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [loading, setLoading] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setLoading(true); setError("");
+    event.preventDefault(); setLoading(true); setError(""); setNotice("");
     const form = new FormData(event.currentTarget);
     try {
-      const user = mode === "login" ? await login(String(form.get("email")), String(form.get("password"))) : await register({ name: String(form.get("name")), email: String(form.get("email")), password: String(form.get("password")), role: String(form.get("role")) as "STUDENT"|"RECRUITER" });
-      navigate(`/${user.role.toLowerCase()}/dashboard`);
+      if (mode === "login") {
+        const user = await login(String(form.get("email")), String(form.get("password")));
+        navigate(`/${user.role.toLowerCase()}/dashboard`);
+      } else {
+        await register({ name: String(form.get("name")), email: String(form.get("email")), password: String(form.get("password")), role: String(form.get("role")) as "STUDENT"|"RECRUITER" });
+        setNotice("Account created. Check your email to verify your address before signing in.");
+      }
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to continue"); } finally { setLoading(false); }
   }
-  return <main className="auth-page"><Link className="brand auth-brand" to="/"><span className="brand-mark"><GraduationCap size={22}/></span>SkillBridge</Link><section className="auth-card"><span className="eyebrow">{mode === "login" ? "Welcome back" : "Join SkillBridge"}</span><h1>{mode === "login" ? "Sign in to your workspace" : "Create your account"}</h1>{error && <div className="alert error">{error}</div>}<form onSubmit={submit}>{mode === "register" && <label>Full name<input name="name" required minLength={2}/></label>}<label>Email address<input name="email" type="email" required/></label><label>Password<input name="password" type="password" required minLength={8}/></label>{mode === "register" && <label>I am a<select name="role"><option value="STUDENT">Student</option><option value="RECRUITER">Recruiter</option></select></label>}<button className="button primary full" disabled={loading}>{loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button></form><p className="auth-switch">{mode === "login" ? "New to SkillBridge?" : "Already have an account?"} <Link to={mode === "login" ? "/register" : "/login"}>{mode === "login" ? "Create account" : "Sign in"}</Link></p></section></main>;
+  return <main className="auth-page"><Link className="brand auth-brand" to="/"><span className="brand-mark"><GraduationCap size={22}/></span>SkillBridge</Link><section className="auth-card"><span className="eyebrow">{mode === "login" ? "Welcome back" : "Join SkillBridge"}</span><h1>{mode === "login" ? "Sign in to your workspace" : "Create your account"}</h1>{error && <div className="alert error" role="alert">{error}</div>}{notice && <div className="alert success" role="status">{notice}</div>}<form onSubmit={submit}>{mode === "register" && <label>Full name<input name="name" required minLength={2}/></label>}<label>Email address<input name="email" type="email" required/></label><label>Password<input name="password" type="password" required minLength={8}/></label>{mode === "register" && <label>I am a<select name="role"><option value="STUDENT">Student</option><option value="RECRUITER">Recruiter</option></select></label>}<button className="button primary full" disabled={loading}>{loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button></form>{mode === "login" && <p><Link to="/forgot-password">Forgot your password?</Link></p>}<p className="auth-switch">{mode === "login" ? "New to SkillBridge?" : "Already have an account?"} <Link to={mode === "login" ? "/register" : "/login"}>{mode === "login" ? "Create account" : "Sign in"}</Link></p></section></main>;
+}
+
+function ForgotPasswordPage() {
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(""); setNotice(""); setLoading(true);
+    const form = new FormData(event.currentTarget);
+    try {
+      const result = await api<{ message: string }>("/api/auth/password-reset/request", { method: "POST", body: JSON.stringify({ email: form.get("email") }) });
+      setNotice(result.message);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to request a reset"); }
+    finally { setLoading(false); }
+  }
+  return <main className="auth-page"><Link className="brand auth-brand" to="/"><span className="brand-mark"><GraduationCap size={22}/></span>SkillBridge</Link><section className="auth-card"><span className="eyebrow">Account recovery</span><h1>Reset your password</h1>{error && <div className="alert error" role="alert">{error}</div>}{notice && <div className="alert success" role="status">{notice}</div>}<form onSubmit={submit}><label>Email address<input name="email" type="email" required/></label><button className="button primary full" disabled={loading}>{loading ? "Please wait…" : "Send reset link"}</button></form><p className="auth-switch"><Link to="/login">Back to sign in</Link></p></section></main>;
+}
+
+function VerifyEmailPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const tokenRef = useRef(searchParams.get("token"));
+  const started = useRef(false);
+  const [status, setStatus] = useState("Verifying your email…");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    const token = tokenRef.current;
+    navigate("/verify-email", { replace: true });
+    if (!token) { setStatus(""); setError("This verification link is invalid or expired."); return; }
+    api<{ message: string }>("/api/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) })
+      .then((result) => setStatus(result.message))
+      .catch((reason: unknown) => { setStatus(""); setError(reason instanceof Error ? reason.message : "Unable to verify your email"); });
+  }, [navigate]);
+  return <main className="auth-page"><Link className="brand auth-brand" to="/"><span className="brand-mark"><GraduationCap size={22}/></span>SkillBridge</Link><section className="auth-card"><span className="eyebrow">Email verification</span><h1>Verify your address</h1>{status && <div className="alert success" role="status">{status}</div>}{error && <div className="alert error" role="alert">{error}</div>}<Link className="button primary full" to="/login">Continue to sign in</Link></section></main>;
+}
+
+function ResetPasswordPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState("");
+  const token = searchParams.get("token");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(""); setNotice("");
+    const form = new FormData(event.currentTarget);
+    const password = String(form.get("password"));
+    if (password !== form.get("confirmPassword")) { setError("Passwords do not match."); return; }
+    if (!token) { setError("This reset link is invalid or expired."); return; }
+    navigate("/reset-password", { replace: true });
+    setLoading(true);
+    try {
+      const result = await api<{ message: string }>("/api/auth/password-reset/confirm", { method: "POST", body: JSON.stringify({ token, password }) });
+      setNotice(result.message);
+      window.setTimeout(() => navigate("/login"), 1200);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to update your password"); }
+    finally { setLoading(false); }
+  }
+  return <main className="auth-page"><Link className="brand auth-brand" to="/"><span className="brand-mark"><GraduationCap size={22}/></span>SkillBridge</Link><section className="auth-card"><span className="eyebrow">Account recovery</span><h1>Choose a new password</h1>{error && <div className="alert error" role="alert">{error}</div>}{notice && <div className="alert success" role="status">{notice}</div>}<form onSubmit={submit}><label>New password<input name="password" type="password" required minLength={8}/></label><label>Confirm password<input name="confirmPassword" type="password" required minLength={8}/></label><button className="button primary full" disabled={loading}>{loading ? "Please wait…" : "Update password"}</button></form></section></main>;
 }
 
 function JobsPage() {
@@ -174,21 +238,22 @@ function DashboardShell({ children, title }: { children: ReactNode; title: strin
 
 function NotificationMenu() {
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
   const [actionError,setActionError]=useState("");
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => api<{ items: { id: string; title: string; message: string; readAt: string | null; createdAt: string }[] }>("/api/notifications"),
+    queryKey: ["notifications", page],
+    queryFn: () => api<{ items: { id: string; title: string; message: string; readAt: string | null; createdAt: string }[]; unreadCount: number; pagination: { page: number; totalPages: number } }>(`/api/notifications?page=${page}`),
     enabled: open,
   });
-  const unread = query.data?.items.filter((item) => !item.readAt).length ?? 0;
+  const unread = query.data?.unreadCount ?? 0;
   async function markRead(id: string) {
     try { setActionError(""); await api(`/api/notifications/${id}/read`, { method: "PATCH" }); await queryClient.invalidateQueries({ queryKey: ["notifications"] }); }
     catch(reason) { setActionError(reason instanceof Error?reason.message:"Unable to mark notification as read"); }
   }
   return <div className="notification-control">
     <button className="icon-button notification-button" aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`} aria-expanded={open} onClick={() => setOpen((value) => !value)}><Bell size={18}/>{unread > 0 && <span className="notification-count">{unread}</span>}</button>
-    {open && <section className="notification-popover" aria-label="Notifications"><div className="panel-head"><strong>Notifications</strong><button className="icon-button" aria-label="Close notifications" onClick={() => setOpen(false)}><X size={16}/></button></div>{actionError&&<div className="alert error" role="alert">{actionError}</div>}{query.isLoading ? <p>Loading notifications…</p> : query.isError ? <QueryError error={query.error} retry={query.refetch}/> : query.data?.items.length ? query.data.items.map((item) => <article className={`notification-item ${item.readAt ? "" : "unread"}`} key={item.id}><strong>{item.title}</strong><p>{item.message}</p><small>{new Date(item.createdAt).toLocaleString()}</small>{!item.readAt && <button className="button ghost" onClick={() => void markRead(item.id)}>Mark as read</button>}</article>) : <Empty text="You're all caught up"/>}</section>}
+    {open && <section className="notification-popover" aria-label="Notifications"><div className="panel-head"><strong>Notifications</strong><button className="icon-button" aria-label="Close notifications" onClick={() => setOpen(false)}><X size={16}/></button></div>{actionError&&<div className="alert error" role="alert">{actionError}</div>}{query.isLoading ? <p>Loading notifications…</p> : query.isError ? <QueryError error={query.error} retry={query.refetch}/> : query.data?.items.length ? <>{query.data.items.map((item) => <article className={`notification-item ${item.readAt ? "" : "unread"}`} key={item.id}><strong>{item.title}</strong><p>{item.message}</p><small>{new Date(item.createdAt).toLocaleString()}</small>{!item.readAt && <button className="button ghost" onClick={() => void markRead(item.id)}>Mark as read</button>}</article>)}<div className="page-controls"><button className="button ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Newer</button><span>Page {page} of {query.data.pagination.totalPages}</span><button className="button ghost" disabled={page >= query.data.pagination.totalPages} onClick={() => setPage((value) => value + 1)}>Older</button></div></> : <Empty text="You're all caught up"/>}</section>}
   </div>;
 }
 
@@ -345,6 +410,9 @@ export default function App() {
     <Route path="/jobs/:id" element={<JobDetail/>}/>
     <Route path="/login" element={<AuthPage mode="login"/>}/>
     <Route path="/register" element={<AuthPage mode="register"/>}/>
+    <Route path="/forgot-password" element={<ForgotPasswordPage/>}/>
+    <Route path="/verify-email" element={<VerifyEmailPage/>}/>
+    <Route path="/reset-password" element={<ResetPasswordPage/>}/>
     <Route path="/student/dashboard" element={<Protected role="STUDENT"><StudentDashboard/></Protected>}/>
     <Route path="/student/profile" element={<Protected role="STUDENT"><ProfilePage/></Protected>}/>
     <Route path="/student/resume" element={<Protected role="STUDENT"><ResumePage/></Protected>}/>

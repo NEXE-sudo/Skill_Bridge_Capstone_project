@@ -1,7 +1,10 @@
 {
   "name": "skillbridge",
   "private": true,
-  "workspaces": ["client", "server"],
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w server && npm run build -w client",
@@ -9,19 +12,23 @@
     "lint": "npm run lint -w server && npm run lint -w client",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "db:cleanup-auth": "tsx prisma/cleanup-expired-auth-records.ts",
+    "test:e2e": "npm run test:e2e -w client"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.1",
     "globals": "^16.5.0",
-    "prisma": "^6.19.0",
+    "prisma": "^7.10.1",
     "tsx": "^4.20.6",
     "typescript-eslint": "^8.48.1"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+  "overrides": {
+    "@prisma/config": {
+      "effect": "3.22.5"
+    }
   }
 }

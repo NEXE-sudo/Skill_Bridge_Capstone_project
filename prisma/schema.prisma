@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -53,6 +52,11 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum AccountTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 model User {
   id             String           @id @default(cuid())
   name           String
@@ -60,6 +64,7 @@ model User {
   passwordHash   String
   role           Role
   accountStatus  AccountStatus    @default(ACTIVE)
+  emailVerifiedAt DateTime?       @default(now())
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   studentProfile StudentProfile?
@@ -70,6 +75,19 @@ model User {
   notifications  Notification[]
   auditLogs      AuditLog[]
   sessions       SessionToken[]
+  accountTokens  AccountToken[]
+}
+
+model AccountToken {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String          @unique
+  type      AccountTokenType
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime        @default(now())
+  @@index([userId, type, expiresAt])
 }
 
 model SessionToken {
@@ -156,13 +174,16 @@ model Application {
   studentId   String
   student     User              @relation("StudentApplications", fields: [studentId], references: [id], onDelete: Cascade)
   resumeKey   String?
+  resumeName  String?
   coverLetter String?
   status      ApplicationStatus @default(APPLIED)
   appliedAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   @@unique([jobId, studentId])
   @@index([studentId, status])
+  @@index([studentId, appliedAt])
   @@index([jobId, status])
+  @@index([jobId, appliedAt])
 }
 
 model SavedJob {
@@ -186,6 +207,7 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime  @default(now())
   @@index([userId, readAt])
+  @@index([userId, createdAt])
 }
 
 model AuditLog {

@@ -1,0 +1,106 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a unique POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks: [data]
+
+  redis:
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set a unique REDIS_PASSWORD}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Set a unique REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks: [data]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL for the private postgres service}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [data]
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      target: runtime
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL for the private postgres service}
+      REDIS_URL: ${REDIS_URL:?Set REDIS_URL for the private redis service}
+      JWT_SECRET: ${JWT_SECRET:?Set a random JWT_SECRET of at least 32 characters}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:?Set the browser application origin}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:?Set the public browser application origin}
+      TRUST_PROXY: ${TRUST_PROXY:-2}
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-lax}
+      RESUME_STORAGE_PROVIDER: s3
+      RESUME_S3_BUCKET: ${RESUME_S3_BUCKET:?Set a private S3-compatible resume bucket}
+      RESUME_S3_REGION: ${RESUME_S3_REGION:?Set the S3-compatible bucket region}
+      RESUME_S3_ENDPOINT: ${RESUME_S3_ENDPOINT:-}
+      RESUME_S3_FORCE_PATH_STYLE: ${RESUME_S3_FORCE_PATH_STYLE:-false}
+      RESUME_S3_KMS_KEY_ID: ${RESUME_S3_KMS_KEY_ID:-}
+      SMTP_URL: ${SMTP_URL:?Set the SMTP connection URL}
+      EMAIL_FROM: ${EMAIL_FROM:?Set the verified sender address}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+    networks: [app, data]
+
+  web:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [app]
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app:
+  data:

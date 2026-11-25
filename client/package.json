@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run --config vitest.config.ts",
+    "test:e2e": "playwright test -c playwright.config.ts",
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc -b --noEmit"
   },
@@ -19,15 +20,17 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.1",
+    "@playwright/test": "^1.65.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
+    "@vitejs/plugin-react": "^6.3.0",
     "jsdom": "^27.2.0",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4",
+    "vite": "^8.3.8",
     "vitest": "^4.0.15"
   }
 }

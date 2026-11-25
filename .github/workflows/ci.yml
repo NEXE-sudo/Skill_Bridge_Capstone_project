@@ -20,8 +20,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://skillbridge:skillbridge@localhost:5432/skillbridge
+      REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-only-secret-with-more-than-32-characters
       ADMIN_SEED_PASSWORD: CI-admin-password-123!
     steps:
@@ -31,9 +41,18 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm audit --omit=dev --audit-level=high
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
       - run: npm run build
+      - run: docker compose config --quiet
+      - run: docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet
+      - run: docker build -f server/Dockerfile --target runtime -t skillbridge-api:ci .
+      - run: docker build -f server/Dockerfile --target migrate -t skillbridge-migrate:ci .
+      - run: docker build -f client/Dockerfile -t skillbridge-web:ci .

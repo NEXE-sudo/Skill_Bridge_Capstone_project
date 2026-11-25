@@ -1,7 +1,10 @@
 import { PrismaClient, Role, AccountStatus, JobStatus, JobType, WorkArrangement, ExperienceLevel, ApplicationStatus } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL must be configured for seeding");
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 
 const pick = <T>(items: T[], index: number) => items[index % items.length];
 
@@ -14,6 +17,11 @@ async function main() {
   const passwordHash = await bcrypt.hash("Student123!", 12);
   const recruiterHash = await bcrypt.hash("Recruiter123!", 12);
   const adminHash = await bcrypt.hash(adminPassword, 12);
+
+  const existingUsers = await prisma.user.count();
+  if (existingUsers > 0 && process.env.ALLOW_DESTRUCTIVE_SEED_RESET !== "true") {
+    throw new Error("The synthetic seed clears existing application data. Set ALLOW_DESTRUCTIVE_SEED_RESET=true only for a disposable local database.");
+  }
 
   await prisma.auditLog.deleteMany();
   await prisma.application.deleteMany();

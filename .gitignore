@@ -5,5 +5,7 @@ dist/
 server/uploads/*
 !server/uploads/.gitkeep
 coverage/
+client/test-results/
+client/playwright-report/
 *.log
 .DS_Store

@@ -40,7 +40,7 @@ describe("application workflows", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (path === "/api/auth/login") {
-        return jsonResponse({ token: "session-token", user: { id: "student-1", name: "Ava Student", email: "ava@example.test", role: "STUDENT" } });
+        return jsonResponse({ user: { id: "student-1", name: "Ava Student", email: "ava@example.test", role: "STUDENT" } });
       }
       if (path === "/api/student/dashboard") {
         return jsonResponse({ applications: { total: 0, counts: {}, recent: [] }, savedJobs: 0, recommendations: [] });
@@ -57,12 +57,11 @@ describe("application workflows", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByText("Welcome back, Ava")).toBeInTheDocument();
-    expect(localStorage.getItem("skillbridge_token")).toBe("session-token");
+    expect(localStorage.getItem("skillbridge_token")).toBeNull();
     await user.click(screen.getByRole("button", { name: /Log out/ }));
 
     expect(await screen.findByRole("heading", { name: "Sign in to your workspace" })).toBeInTheDocument();
-    expect(localStorage.getItem("skillbridge_token")).toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", expect.objectContaining({ method: "POST", credentials: "include" }));
   });
 
   it("redirects unauthenticated users from protected routes to sign in", async () => {
@@ -71,8 +70,26 @@ describe("application workflows", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Sign in to your workspace" })).toBeInTheDocument());
   });
 
+  it("keeps new accounts signed out until email verification", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/auth/register") return jsonResponse({ message: "Check your email to verify your address." }, 201);
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderApp("/register");
+
+    await user.type(screen.getByLabelText("Full name"), "Ava Student");
+    await user.type(screen.getByLabelText("Email address"), "ava@example.test");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/verify your address/i);
+    expect(localStorage.getItem("skillbridge_token")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/register", expect.objectContaining({ credentials: "include" }));
+  });
+
   it("clears an expired browser session and redirects to sign in", async () => {
-    localStorage.setItem("skillbridge_token", "expired-session");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/auth/me") {
         return jsonResponse({ id: "student-1", name: "Ava Student", email: "ava@example.test", role: "STUDENT" });
