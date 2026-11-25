@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  RECRUITER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  INTERNSHIP
+  CONTRACT
+}
+
+enum WorkArrangement {
+  REMOTE
+  HYBRID
+  ON_SITE
+}
+
+enum ExperienceLevel {
+  ENTRY
+  MID
+  SENIOR
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  APPLIED
+  UNDER_REVIEW
+  SHORTLISTED
+  INTERVIEW
+  OFFERED
+  REJECTED
+  WITHDRAWN
+}
+
+model User {
+  id             String           @id @default(cuid())
+  name           String
+  email          String           @unique
+  passwordHash   String
+  role           Role
+  accountStatus  AccountStatus    @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  studentProfile StudentProfile?
+  recruiterProfile RecruiterProfile?
+  jobs           Job[]
+  applications   Application[]    @relation("StudentApplications")
+  savedJobs      SavedJob[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+}
+
+model StudentProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone          String?
+  location       String?
+  university     String?
+  degree         String?
+  branch         String?
+  graduationYear Int?
+  bio            String?
+  skills         String[] @default([])
+  linkedinUrl    String?
+  githubUrl      String?
+  portfolioUrl   String?
+  resumeKey      String?
+  resumeName     String?
+  resumeSize     Int?
+  resumeType     String?
+  resumeUpdatedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model RecruiterProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation    String?
+  organisationLogo String?
+  designation     String?
+  website         String?
+  industry        String?
+  location        String?
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Job {
+  id              String           @id @default(cuid())
+  recruiterId     String
+  recruiter       User             @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+  title           String
+  description     String
+  responsibilities String[]
+  requirements    String[]
+  skills          String[]         @default([])
+  jobType         JobType
+  workArrangement WorkArrangement
+  location        String
+  experienceLevel ExperienceLevel
+  salaryMin       Int?
+  salaryMax       Int?
+  deadline        DateTime
+  status          JobStatus        @default(DRAFT)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  applications    Application[]
+  savedBy         SavedJob[]
+  @@index([status, deadline])
+  @@index([title, location])
+  @@index([recruiterId])
+}
+
+model Application {
+  id          String            @id @default(cuid())
+  jobId       String
+  job         Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User              @relation("StudentApplications", fields: [studentId], references: [id], onDelete: Cascade)
+  resumeKey   String?
+  coverLetter String?
+  status      ApplicationStatus @default(APPLIED)
+  appliedAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  @@unique([jobId, studentId])
+  @@index([studentId, status])
+  @@index([jobId, status])
+}
+
+model SavedJob {
+  id        String   @id @default(cuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@unique([studentId, jobId])
+  @@index([studentId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
