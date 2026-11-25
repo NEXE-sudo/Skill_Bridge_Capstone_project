@@ -63,6 +63,7 @@ These accounts are synthetic development data only.
 ```bash
 npm run dev
 npm run typecheck
+npm run lint
 npm test
 npm run build
 npm run db:migrate
@@ -73,6 +74,6 @@ docker compose down
 
 ## Deployment
 
-Deploy PostgreSQL with a managed provider, apply migrations using `npx prisma migrate deploy`, deploy the Express server as a Node service, and deploy `client/dist` on Vercel. Set `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, and `CLIENT_ORIGIN` in hosted environment settings. Do not deploy or expose `.env`.
+The checked-in Compose file starts PostgreSQL for local development; it is not a full-stack or production Compose deployment. The API image can be built with `docker build -f server/Dockerfile -t skillbridge-api .`; provide `DATABASE_URL`, a random `JWT_SECRET` of at least 32 characters, `CLIENT_ORIGIN`, and any proxy configuration at runtime. Apply migrations with `npx prisma migrate deploy` before serving traffic. The client is built separately with `npm run build -w client` and its `dist/` directory can be deployed to a static host. No hosted deployment URL or production deployment has been verified.
 
-Resume uploads use private server storage in the local implementation. Production deployments should replace this adapter with encrypted object storage and provide short-lived signed download URLs.
+Resume uploads currently use local disk storage. This is not durable or shared storage for replicated/ephemeral production deployments; replace it with private encrypted object storage and malware scanning before production. See [the production-readiness checklist](./docs/PRODUCTION_READINESS.md) for verified scope and remaining release blockers.

@@ -6,8 +6,9 @@ const prisma = new PrismaClient();
 const pick = <T>(items: T[], index: number) => items[index % items.length];
 
 async function main() {
+  if (process.env.NODE_ENV === "production") throw new Error("The synthetic seed is disabled in production");
   const adminPassword = process.env.ADMIN_SEED_PASSWORD;
-  if (!adminPassword) throw new Error("ADMIN_SEED_PASSWORD is required for local seed");
+  if (!adminPassword || adminPassword.length < 12) throw new Error("ADMIN_SEED_PASSWORD must be at least 12 characters");
   const adminEmail = process.env.ADMIN_SEED_EMAIL ?? "admin@skillbridge.local";
 
   const passwordHash = await bcrypt.hash("Student123!", 12);

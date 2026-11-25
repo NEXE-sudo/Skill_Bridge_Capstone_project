@@ -2,23 +2,31 @@
 
 ## Implemented
 
-- React and Express TypeScript monorepo
-- Prisma PostgreSQL schema and initial migration
-- Synthetic seed data
-- JWT registration/login and role-protected APIs
-- Public landing and job search/detail pages
-- Student, recruiter, and administrator dashboards
-- Profile, resume, saved-job, application, listing, applicant, moderation, and notification APIs
-- Docker Compose database, Dockerfiles, and CI workflow
-- Focused Vitest API baseline
-- Responsive UI and persistent theme preference
+- Student, recruiter, and administrator role-protected workflows.
+- Account registration/login, persisted revocable JWT sessions, logout, and account suspension checks.
+- Public job search with validated filters, newest/oldest ordering, and pagination.
+- Recruiter listing ownership checks, applicant filtering/pagination, and resume access restricted to applicants for the recruiter's own jobs.
+- Draft-only recruiter listing deletion; closed listings can be reopened without removing application history.
+- Duplicate application prevention and explicit application status/withdrawal rules.
+- Resume extension/MIME/signature checks, a 5 MiB limit, authenticated retrieval, replacement, and deletion that preserves application snapshots.
+- Transactional audit records for administrator moderation and user status changes.
+- PostgreSQL schema constraints, migrations, synthetic seed data, responsive layouts, and loading/error/empty states in major views.
+- Backend PostgreSQL integration tests and frontend login/logout/protected-route tests.
 
-## Verification
+## Verified locally
 
-- PostgreSQL 16 migration and seed: completed successfully with Docker Compose
-- Live API health, public jobs, and seeded student login: verified
-- Frontend development server: reachable on port 5173
-- Backend tests: 10 passed
-- Frontend test baseline: 1 passed
-- Workspace type checking: passed
-- Backend and frontend production builds: passed
+The production-readiness audit ran:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm test` (11 backend integration tests and 3 frontend workflow tests)
+- `npm run build`
+- `npx prisma migrate status` (database up to date)
+- `docker compose config --quiet` and an API Docker image build
+- Temporary API container health endpoint and container health-check status
+
+These are local checks only. They do not establish that a hosted deployment, production database, or external identity/email/storage integration works.
+
+## Open readiness work
+
+The project is not yet production-ready. Important outstanding items include unresolved high-severity production dependency advisories, local-disk resume storage, process-local rate limiting, limited end-to-end/accessibility coverage, and no deployed production environment. See [PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md).
